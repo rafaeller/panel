@@ -5,7 +5,6 @@ namespace Pterodactyl\Exceptions;
 use Exception;
 use PDOException;
 use Psr\Log\LoggerInterface;
-use Swift_TransportException;
 use Illuminate\Container\Container;
 use Illuminate\Database\Connection;
 use Illuminate\Auth\AuthenticationException;
@@ -16,6 +15,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Pterodactyl\Exceptions\Repository\RecordNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class Handler extends ExceptionHandler
 {
@@ -49,7 +49,6 @@ class Handler extends ExceptionHandler
      */
     protected $cleanStacks = [
         PDOException::class,
-        Swift_TransportException::class,
     ];
 
     /**
@@ -133,7 +132,7 @@ class Handler extends ExceptionHandler
      * Render an exception into an HTTP response.
      *
      * @param \Illuminate\Http\Request $request
-     * @param \Exception $exception
+     * @param \Exception               $exception
      * @return \Symfony\Component\HttpFoundation\Response
      *
      * @throws \Exception
@@ -155,6 +154,26 @@ class Handler extends ExceptionHandler
             $connections->rollBack(0);
         }
 
+        // Because of some breaking change snuck into a Laravel update that didn't get caught
+        // by any of the tests, exceptions implementing the HttpExceptionInterface get marked
+        // as being HttpExceptions, but aren't actually implementing the HttpException abstract.
+        //
+        // This is incredibly annoying because we can't just temporarily override the handler to
+        // allow these (at least without taking on a high maintenance cost). Laravel 5.8 fixes this,
+        // so when we update (or have updated) this code can be removed.
+        //
+        // @see https://github.com/laravel/framework/pull/25975
+        // @todo remove this code when upgrading to Laravel 5.8
+        if ($exception instanceof HttpExceptionInterface && ! $exception instanceof HttpException) {
+            $exception = new HttpException(
+                $exception->getStatusCode(),
+                $exception->getMessage(),
+                $exception,
+                $exception->getHeaders(),
+                $exception->getCode()
+            );
+        }
+
         return parent::render($request, $exception);
     }
 
@@ -162,7 +181,7 @@ class Handler extends ExceptionHandler
      * Transform a validation exception into a consistent format to be returned for
      * calls to the API.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param \Illuminate\Http\Request                   $request
      * @param \Illuminate\Validation\ValidationException $exception
      * @return \Illuminate\Http\JsonResponse
      */
@@ -201,7 +220,7 @@ class Handler extends ExceptionHandler
      * Return the exception as a JSONAPI representation for use on API requests.
      *
      * @param \Exception $exception
-     * @param array $override
+     * @param array      $override
      * @return array
      */
     public static function convertToArray(Exception $exception, array $override = []): array
@@ -242,14 +261,14 @@ class Handler extends ExceptionHandler
     /**
      * Convert an authentication exception into an unauthenticated response.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param \Illuminate\Http\Request                 $request
      * @param \Illuminate\Auth\AuthenticationException $exception
      * @return \Illuminate\Http\Response
      */
     protected function unauthenticated($request, AuthenticationException $exception)
     {
         if ($request->expectsJson()) {
-            return response()->json(self::convertToArray($exception), 401);
+            return response()->json(['error' => 'Unauthenticated.'], 401);
         }
 
         return redirect()->guest(route('auth.login'));

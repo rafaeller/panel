@@ -28,7 +28,6 @@ class ServerTransformer extends BaseTransformer
         'variables',
         'location',
         'node',
-        'databases',
     ];
 
     /**
@@ -132,7 +131,7 @@ class ServerTransformer extends BaseTransformer
 
         $server->loadMissing('subusers');
 
-        return $this->collection($server->getRelation('subusers'), $this->makeTransformer(SubuserTransformer::class), 'subuser');
+        return $this->collection($server->getRelation('subusers'), $this->makeTransformer(UserTransformer::class), 'user');
     }
 
     /**
@@ -196,14 +195,14 @@ class ServerTransformer extends BaseTransformer
     }
 
     /**
-     * Return a generic array with egg information for this server.
+     * Return a generic array with service option information for this server.
      *
      * @param \Pterodactyl\Models\Server $server
      * @return \League\Fractal\Resource\Item|\League\Fractal\Resource\NullResource
      *
      * @throws \Pterodactyl\Exceptions\Transformer\InvalidTransformerLevelException
      */
-    public function includeEgg(Server $server)
+    public function includeOption(Server $server)
     {
         if (! $this->authorize(AdminAcl::RESOURCE_EGGS)) {
             return $this->null();
@@ -211,7 +210,7 @@ class ServerTransformer extends BaseTransformer
 
         $server->loadMissing('egg');
 
-        return $this->item($server->getRelation('egg'), $this->makeTransformer(EggTransformer::class), 'egg');
+        return $this->item($server->getRelation('egg'), $this->makeTransformer(EggVariableTransformer::class), 'egg');
     }
 
     /**
@@ -269,24 +268,5 @@ class ServerTransformer extends BaseTransformer
         $server->loadMissing('node');
 
         return $this->item($server->getRelation('node'), $this->makeTransformer(NodeTransformer::class), 'node');
-    }
-
-    /**
-     * Return a generic array with database information for this server.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \League\Fractal\Resource\Collection|\League\Fractal\Resource\NullResource
-     *
-     * @throws \Pterodactyl\Exceptions\Transformer\InvalidTransformerLevelException
-     */
-    public function includeDatabases(Server $server)
-    {
-        if (! $this->authorize(AdminAcl::RESOURCE_SERVER_DATABASES)) {
-            return $this->null();
-        }
-
-        $server->loadMissing('databases');
-
-        return $this->collection($server->getRelation('databases'), $this->makeTransformer(ServerDatabaseTransformer::class), 'databases');
     }
 }

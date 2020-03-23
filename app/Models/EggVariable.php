@@ -2,8 +2,16 @@
 
 namespace Pterodactyl\Models;
 
-class EggVariable extends Validable
+use Sofa\Eloquence\Eloquence;
+use Sofa\Eloquence\Validable;
+use Illuminate\Database\Eloquent\Model;
+use Sofa\Eloquence\Contracts\CleansAttributes;
+use Sofa\Eloquence\Contracts\Validable as ValidableContract;
+
+class EggVariable extends Model implements CleansAttributes, ValidableContract
 {
+    use Eloquence, Validable;
+
     /**
      * The resource name for this model when it is transformed into an
      * API representation using fractal.
@@ -45,15 +53,24 @@ class EggVariable extends Validable
     /**
      * @var array
      */
-    public static $validationRules = [
+    protected static $applicationRules = [
+        'name' => 'required',
+        'env_variable' => 'required',
+        'rules' => 'required',
+    ];
+
+    /**
+     * @var array
+     */
+    protected static $dataIntegrityRules = [
         'egg_id' => 'exists:eggs,id',
-        'name' => 'required|string|between:1,255',
+        'name' => 'string|between:1,255',
         'description' => 'string',
-        'env_variable' => 'required|regex:/^[\w]{1,255}$/|notIn:' . self::RESERVED_ENV_NAMES,
+        'env_variable' => 'regex:/^[\w]{1,255}$/|notIn:' . self::RESERVED_ENV_NAMES,
         'default_value' => 'string',
         'user_viewable' => 'boolean',
         'user_editable' => 'boolean',
-        'rules' => 'required|string',
+        'rules' => 'string',
     ];
 
     /**

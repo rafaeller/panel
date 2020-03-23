@@ -2,22 +2,16 @@
 
 namespace Pterodactyl\Models;
 
+use Sofa\Eloquence\Eloquence;
+use Sofa\Eloquence\Validable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notifiable;
+use Sofa\Eloquence\Contracts\CleansAttributes;
+use Sofa\Eloquence\Contracts\Validable as ValidableContract;
 
-/**
- * @property int $id
- * @property int $user_id
- * @property int $server_id
- * @property array $permissions
- * @property \Carbon\Carbon $created_at
- * @property \Carbon\Carbon $updated_at
- *
- * @property \Pterodactyl\Models\User $user
- * @property \Pterodactyl\Models\Server $server
- */
-class Subuser extends Validable
+class Subuser extends Model implements CleansAttributes, ValidableContract
 {
-    use Notifiable;
+    use Eloquence, Notifiable, Validable;
 
     /**
      * The resource name for this model when it is transformed into an
@@ -45,19 +39,24 @@ class Subuser extends Validable
      * @var array
      */
     protected $casts = [
-        'user_id' => 'int',
-        'server_id' => 'int',
-        'permissions' => 'array',
+        'user_id' => 'integer',
+        'server_id' => 'integer',
     ];
 
     /**
      * @var array
      */
-    public static $validationRules = [
-        'user_id' => 'required|numeric|exists:users,id',
-        'server_id' => 'required|numeric|exists:servers,id',
-        'permissions' => 'nullable|array',
-        'permissions.*' => 'string',
+    protected static $applicationRules = [
+        'user_id' => 'required',
+        'server_id' => 'required',
+    ];
+
+    /**
+     * @var array
+     */
+    protected static $dataIntegrityRules = [
+        'user_id' => 'numeric|exists:users,id',
+        'server_id' => 'numeric|exists:servers,id',
     ];
 
     /**

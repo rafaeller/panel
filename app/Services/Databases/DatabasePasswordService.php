@@ -2,8 +2,9 @@
 
 namespace Pterodactyl\Services\Databases;
 
+use Exception;
 use Pterodactyl\Models\Database;
-use Pterodactyl\Helpers\Utilities;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Contracts\Encryption\Encrypter;
 use Pterodactyl\Extensions\DynamicDatabaseConnection;
@@ -34,10 +35,10 @@ class DatabasePasswordService
     /**
      * DatabasePasswordService constructor.
      *
-     * @param \Illuminate\Database\ConnectionInterface $connection
+     * @param \Illuminate\Database\ConnectionInterface                      $connection
      * @param \Pterodactyl\Contracts\Repository\DatabaseRepositoryInterface $repository
-     * @param \Pterodactyl\Extensions\DynamicDatabaseConnection $dynamic
-     * @param \Illuminate\Contracts\Encryption\Encrypter $encrypter
+     * @param \Pterodactyl\Extensions\DynamicDatabaseConnection             $dynamic
+     * @param \Illuminate\Contracts\Encryption\Encrypter                    $encrypter
      */
     public function __construct(
         ConnectionInterface $connection,
@@ -61,7 +62,19 @@ class DatabasePasswordService
      */
     public function handle(Database $database): string
     {
-        $password = Utilities::randomStringWithSpecialCharacters(24);
+        $password = str_random(24);
+        // Given a random string of characters, randomly loop through the characters and replace some
+        // with special characters to avoid issues with MySQL password requirements on some servers.
+        try {
+            for ($i = 0; $i < random_int(2, 6); $i++) {
+                $character = ['!', '@', '=', '.', '+', '^'][random_int(0, 5)];
+
+                $password = substr_replace($password, $character, random_int(0, 23), 1);
+            }
+        } catch (Exception $exception) {
+            // Just log the error and hope for the best at this point.
+            Log::error($exception);
+        }
 
         $this->connection->transaction(function () use ($database, $password) {
             $this->dynamic->set('dynamic', $database->database_host_id);

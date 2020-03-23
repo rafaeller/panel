@@ -6,10 +6,10 @@ use Pterodactyl\Models\Node;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Database\ConnectionInterface;
-use Pterodactyl\Repositories\Daemon\ConfigurationRepository;
 use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
 use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 use Pterodactyl\Exceptions\Service\Node\ConfigurationNotPersistedException;
+use Pterodactyl\Contracts\Repository\Daemon\ConfigurationRepositoryInterface;
 
 class NodeUpdateService
 {
@@ -31,13 +31,13 @@ class NodeUpdateService
     /**
      * UpdateService constructor.
      *
-     * @param \Illuminate\Database\ConnectionInterface $connection
-     * @param \Pterodactyl\Repositories\Daemon\ConfigurationRepository $configurationRepository
-     * @param \Pterodactyl\Contracts\Repository\NodeRepositoryInterface $repository
+     * @param \Illuminate\Database\ConnectionInterface                                  $connection
+     * @param \Pterodactyl\Contracts\Repository\Daemon\ConfigurationRepositoryInterface $configurationRepository
+     * @param \Pterodactyl\Contracts\Repository\NodeRepositoryInterface                 $repository
      */
     public function __construct(
         ConnectionInterface $connection,
-        ConfigurationRepository $configurationRepository,
+        ConfigurationRepositoryInterface $configurationRepository,
         NodeRepositoryInterface $repository
     ) {
         $this->connection = $connection;
@@ -49,8 +49,8 @@ class NodeUpdateService
      * Update the configuration values for a given node on the machine.
      *
      * @param \Pterodactyl\Models\Node $node
-     * @param array $data
-     * @param bool $resetToken
+     * @param array                    $data
+     * @param bool                     $resetToken
      *
      * @return \Pterodactyl\Models\Node
      *
@@ -58,8 +58,6 @@ class NodeUpdateService
      * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
      * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
      * @throws \Pterodactyl\Exceptions\Service\Node\ConfigurationNotPersistedException
-     *
-     * @throws \GuzzleHttp\Exception\GuzzleException
      */
     public function handle(Node $node, array $data, bool $resetToken = false)
     {

@@ -14,7 +14,7 @@ class UpdateServerBuildConfigurationRequest extends ServerWriteRequest
      */
     public function rules(): array
     {
-        $rules = Server::getRulesForUpdate($this->getModel(Server::class));
+        $rules = Server::getUpdateRulesForId($this->getModel(Server::class)->id);
 
         return [
             'allocation' => $rules['allocation_id'],
@@ -97,8 +97,8 @@ class UpdateServerBuildConfigurationRequest extends ServerWriteRequest
      * call.
      *
      * @param string $field
-     * @param array $rules
-     * @param bool $limits
+     * @param array  $rules
+     * @param bool   $limits
      * @return array
      *
      * @see https://github.com/pterodactyl/panel/issues/1500

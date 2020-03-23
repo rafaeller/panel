@@ -6,9 +6,6 @@ use GuzzleHttp\Client;
 use Pterodactyl\Models\Node;
 use Pterodactyl\Models\Server;
 
-/**
- * @deprecated
- */
 interface BaseRepositoryInterface
 {
     /**

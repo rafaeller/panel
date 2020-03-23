@@ -12,10 +12,10 @@ class DatabaseHostFormRequest extends AdminFormRequest
     public function rules()
     {
         if ($this->method() !== 'POST') {
-            return DatabaseHost::getRulesForUpdate($this->route()->parameter('host'));
+            return DatabaseHost::getUpdateRulesForId($this->route()->parameter('host'));
         }
 
-        return DatabaseHost::getRules();
+        return DatabaseHost::getCreateRules();
     }
 
     /**

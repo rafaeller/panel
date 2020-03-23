@@ -9,6 +9,7 @@
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
+use Javascript;
 use Illuminate\Http\Request;
 use Pterodactyl\Models\User;
 use Pterodactyl\Models\Server;
@@ -16,20 +17,27 @@ use Prologue\Alerts\AlertsMessageBag;
 use Pterodactyl\Exceptions\DisplayException;
 use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Services\Servers\SuspensionService;
+use Pterodactyl\Http\Requests\Admin\ServerFormRequest;
+use Pterodactyl\Services\Servers\ServerCreationService;
 use Pterodactyl\Services\Servers\ServerDeletionService;
 use Pterodactyl\Services\Servers\ReinstallServerService;
+use Pterodactyl\Services\Servers\ContainerRebuildService;
 use Pterodactyl\Services\Servers\BuildModificationService;
 use Pterodactyl\Services\Databases\DatabasePasswordService;
 use Pterodactyl\Services\Servers\DetailsModificationService;
 use Pterodactyl\Services\Servers\StartupModificationService;
 use Pterodactyl\Contracts\Repository\NestRepositoryInterface;
+use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
 use Pterodactyl\Repositories\Eloquent\DatabaseHostRepository;
 use Pterodactyl\Services\Databases\DatabaseManagementService;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Pterodactyl\Contracts\Repository\ServerRepositoryInterface;
 use Pterodactyl\Contracts\Repository\DatabaseRepositoryInterface;
+use Pterodactyl\Contracts\Repository\LocationRepositoryInterface;
 use Pterodactyl\Contracts\Repository\AllocationRepositoryInterface;
 use Pterodactyl\Http\Requests\Admin\Servers\Databases\StoreServerDatabaseRequest;
+use Illuminate\Support\Facades\DB;
+use Pterodactyl\Repositories\Daemon\ServerTransferRepository;
 
 class ServersController extends Controller
 {
@@ -52,6 +60,11 @@ class ServersController extends Controller
      * @var \Illuminate\Contracts\Config\Repository
      */
     protected $config;
+
+    /**
+     * @var \Pterodactyl\Services\Servers\ContainerRebuildService
+     */
+    protected $containerRebuildService;
 
     /**
      * @var \Pterodactyl\Contracts\Repository\DatabaseRepositoryInterface
@@ -84,9 +97,19 @@ class ServersController extends Controller
     protected $detailsModificationService;
 
     /**
+     * @var \Pterodactyl\Contracts\Repository\LocationRepositoryInterface
+     */
+    protected $locationRepository;
+
+    /**
      * @var \Pterodactyl\Contracts\Repository\NestRepositoryInterface
      */
     protected $nestRepository;
+
+    /**
+     * @var \Pterodactyl\Contracts\Repository\NodeRepositoryInterface
+     */
+    protected $nodeRepository;
 
     /**
      * @var \Pterodactyl\Services\Servers\ReinstallServerService
@@ -99,6 +122,11 @@ class ServersController extends Controller
     protected $repository;
 
     /**
+     * @var \Pterodactyl\Services\Servers\ServerCreationService
+     */
+    protected $service;
+
+    /**
      * @var \Pterodactyl\Services\Servers\StartupModificationService
      */
     private $startupModificationService;
@@ -107,64 +135,326 @@ class ServersController extends Controller
      * @var \Pterodactyl\Services\Servers\SuspensionService
      */
     protected $suspensionService;
+    protected $serverTransferRepository;
 
     /**
      * ServersController constructor.
      *
-     * @param \Prologue\Alerts\AlertsMessageBag $alert
+     * @param \Prologue\Alerts\AlertsMessageBag                               $alert
      * @param \Pterodactyl\Contracts\Repository\AllocationRepositoryInterface $allocationRepository
-     * @param \Pterodactyl\Services\Servers\BuildModificationService $buildModificationService
-     * @param \Illuminate\Contracts\Config\Repository $config
-     * @param \Pterodactyl\Services\Databases\DatabaseManagementService $databaseManagementService
-     * @param \Pterodactyl\Services\Databases\DatabasePasswordService $databasePasswordService
-     * @param \Pterodactyl\Contracts\Repository\DatabaseRepositoryInterface $databaseRepository
-     * @param \Pterodactyl\Repositories\Eloquent\DatabaseHostRepository $databaseHostRepository
-     * @param \Pterodactyl\Services\Servers\ServerDeletionService $deletionService
-     * @param \Pterodactyl\Services\Servers\DetailsModificationService $detailsModificationService
-     * @param \Pterodactyl\Services\Servers\ReinstallServerService $reinstallService
-     * @param \Pterodactyl\Contracts\Repository\ServerRepositoryInterface $repository
-     * @param \Pterodactyl\Contracts\Repository\NestRepositoryInterface $nestRepository
-     * @param \Pterodactyl\Services\Servers\StartupModificationService $startupModificationService
-     * @param \Pterodactyl\Services\Servers\SuspensionService $suspensionService
+     * @param \Pterodactyl\Services\Servers\BuildModificationService          $buildModificationService
+     * @param \Illuminate\Contracts\Config\Repository                         $config
+     * @param \Pterodactyl\Services\Servers\ContainerRebuildService           $containerRebuildService
+     * @param \Pterodactyl\Services\Servers\ServerCreationService             $service
+     * @param \Pterodactyl\Services\Databases\DatabaseManagementService       $databaseManagementService
+     * @param \Pterodactyl\Services\Databases\DatabasePasswordService         $databasePasswordService
+     * @param \Pterodactyl\Contracts\Repository\DatabaseRepositoryInterface   $databaseRepository
+     * @param \Pterodactyl\Repositories\Eloquent\DatabaseHostRepository       $databaseHostRepository
+     * @param \Pterodactyl\Services\Servers\ServerDeletionService             $deletionService
+     * @param \Pterodactyl\Services\Servers\DetailsModificationService        $detailsModificationService
+     * @param \Pterodactyl\Contracts\Repository\LocationRepositoryInterface   $locationRepository
+     * @param \Pterodactyl\Contracts\Repository\NodeRepositoryInterface       $nodeRepository
+     * @param \Pterodactyl\Services\Servers\ReinstallServerService            $reinstallService
+     * @param \Pterodactyl\Contracts\Repository\ServerRepositoryInterface     $repository
+     * @param \Pterodactyl\Contracts\Repository\NestRepositoryInterface       $nestRepository
+     * @param \Pterodactyl\Services\Servers\StartupModificationService        $startupModificationService
+     * @param \Pterodactyl\Services\Servers\SuspensionService                 $suspensionService
      */
     public function __construct(
         AlertsMessageBag $alert,
         AllocationRepositoryInterface $allocationRepository,
         BuildModificationService $buildModificationService,
         ConfigRepository $config,
+        ContainerRebuildService $containerRebuildService,
+        ServerCreationService $service,
         DatabaseManagementService $databaseManagementService,
         DatabasePasswordService $databasePasswordService,
         DatabaseRepositoryInterface $databaseRepository,
         DatabaseHostRepository $databaseHostRepository,
         ServerDeletionService $deletionService,
         DetailsModificationService $detailsModificationService,
+        LocationRepositoryInterface $locationRepository,
+        NodeRepositoryInterface $nodeRepository,
         ReinstallServerService $reinstallService,
         ServerRepositoryInterface $repository,
         NestRepositoryInterface $nestRepository,
         StartupModificationService $startupModificationService,
+        ServerTransferRepository $serverTransferRepository,
         SuspensionService $suspensionService
     ) {
         $this->alert = $alert;
         $this->allocationRepository = $allocationRepository;
         $this->buildModificationService = $buildModificationService;
         $this->config = $config;
+        $this->containerRebuildService = $containerRebuildService;
         $this->databaseHostRepository = $databaseHostRepository;
         $this->databaseManagementService = $databaseManagementService;
         $this->databasePasswordService = $databasePasswordService;
         $this->databaseRepository = $databaseRepository;
         $this->detailsModificationService = $detailsModificationService;
         $this->deletionService = $deletionService;
+        $this->locationRepository = $locationRepository;
         $this->nestRepository = $nestRepository;
+        $this->nodeRepository = $nodeRepository;
         $this->reinstallService = $reinstallService;
         $this->repository = $repository;
+        $this->service = $service;
         $this->startupModificationService = $startupModificationService;
         $this->suspensionService = $suspensionService;
+        $this->serverTransferRepository = $serverTransferRepository;
+    }
+
+    /**
+     * Display the index page with all servers currently on the system.
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\View\View
+     */
+    public function index(Request $request)
+    {
+        return view('admin.servers.index', [
+            'servers' => $this->repository->setSearchTerm($request->input('query'))->getAllServers(
+                $this->config->get('pterodactyl.paginate.admin.servers')
+            ),
+        ]);
+    }
+
+    /**
+     * Display create new server page.
+     *
+     * @return \Illuminate\View\View
+     *
+     * @throws \Exception
+     */
+    public function create()
+    {
+        $nodes = $this->nodeRepository->all();
+        if (count($nodes) < 1) {
+            $this->alert->warning(trans('admin/server.alerts.node_required'))->flash();
+
+            return redirect()->route('admin.nodes');
+        }
+
+        $nests = $this->nestRepository->getWithEggs();
+
+        Javascript::put([
+            'nodeData' => $this->nodeRepository->getNodesForServerCreation(),
+            'nests' => $nests->map(function ($item) {
+                return array_merge($item->toArray(), [
+                    'eggs' => $item->eggs->keyBy('id')->toArray(),
+                ]);
+            })->keyBy('id'),
+        ]);
+
+        return view('admin.servers.new', [
+            'locations' => $this->locationRepository->all(),
+            'nests' => $nests,
+        ]);
+    }
+
+    /**
+     * Handle POST of server creation form.
+     *
+     * @param \Pterodactyl\Http\Requests\Admin\ServerFormRequest $request
+     * @return \Illuminate\Http\RedirectResponse
+     *
+     * @throws \Illuminate\Validation\ValidationException
+     * @throws \Pterodactyl\Exceptions\DisplayException
+     * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
+     * @throws \Pterodactyl\Exceptions\Model\DataValidationException
+     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
+     * @throws \Pterodactyl\Exceptions\Service\Deployment\NoViableAllocationException
+     * @throws \Pterodactyl\Exceptions\Service\Deployment\NoViableNodeException
+     */
+    public function store(ServerFormRequest $request)
+    {
+        $server = $this->service->handle($request->except('_token'));
+        $this->alert->success(trans('admin/server.alerts.server_created'))->flash();
+
+        return redirect()->route('admin.servers.view', $server->id);
+    }
+
+    /**
+     * Display the index when viewing a specific server.
+     *
+     * @param \Pterodactyl\Models\Server $server
+     * @return \Illuminate\View\View
+     */
+    public function viewIndex(Server $server)
+    {
+        return view('admin.servers.view.index', ['server' => $server]);
+    }
+
+    /**
+     * Display the details page when viewing a specific server.
+     *
+     * @param int $server
+     * @return \Illuminate\View\View
+     *
+     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
+     */
+    public function viewDetails($server)
+    {
+        return view('admin.servers.view.details', [
+            'server' => $this->repository->findFirstWhere([
+                ['id', '=', $server],
+                ['installed', '=', 1],
+            ]),
+        ]);
+    }
+
+    /**
+     * Display the build details page when viewing a specific server.
+     *
+     * @param int $server
+     * @return \Illuminate\View\View
+     *
+     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
+     */
+    public function viewBuild($server)
+    {
+        $server = $this->repository->findFirstWhere([
+            ['id', '=', $server],
+            ['installed', '=', 1],
+        ]);
+
+        $allocations = $this->allocationRepository->getAllocationsForNode($server->node_id);
+
+        return view('admin.servers.view.build', [
+            'server' => $server,
+            'assigned' => $allocations->where('server_id', $server->id)->sortBy('port')->sortBy('ip'),
+            'unassigned' => $allocations->where('server_id', null)->sortBy('port')->sortBy('ip'),
+        ]);
+    }
+
+    /**
+     * Display startup configuration page for a server.
+     *
+     * @param \Pterodactyl\Models\Server $server
+     * @return \Illuminate\View\View
+     *
+     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
+     */
+    public function viewStartup(Server $server)
+    {
+        $parameters = $this->repository->getVariablesWithValues($server->id, true);
+        if (! $parameters->server->installed) {
+            abort(404);
+        }
+
+        $nests = $this->nestRepository->getWithEggs();
+
+        Javascript::put([
+            'server' => $server,
+            'nests' => $nests->map(function ($item) {
+                return array_merge($item->toArray(), [
+                    'eggs' => $item->eggs->keyBy('id')->toArray(),
+                ]);
+            })->keyBy('id'),
+            'server_variables' => $parameters->data,
+        ]);
+
+        return view('admin.servers.view.startup', [
+            'server' => $parameters->server,
+            'nests' => $nests,
+        ]);
+    }
+
+    /**
+     * Display the database management page for a specific server.
+     *
+     * @param \Pterodactyl\Models\Server $server
+     * @return \Illuminate\View\View
+     */
+    public function viewDatabase(Server $server)
+    {
+        $this->repository->loadDatabaseRelations($server);
+
+        return view('admin.servers.view.database', [
+            'hosts' => $this->databaseHostRepository->all(),
+            'server' => $server,
+        ]);
+    }
+
+    /**
+     * Display the management page when viewing a specific server.
+     *
+     * @param \Pterodactyl\Models\Server $server
+     * @return \Illuminate\View\View
+     *
+     * @throws \Pterodactyl\Exceptions\DisplayException
+     */
+    public function viewManage(Server $server)
+    {
+        if ($server->installed > 1) {
+            throw new DisplayException('This server is in a failed installation state and must be deleted and recreated.');
+        }
+        $nodes = DB::table('nodes')->get();
+$allocations = DB::table('allocations')->whereNull('server_id')->get();
+$type = '';
+$status = 0;
+$transfer_old = DB::table('server_transfers')->where('old_server_id', '=', $server->id)->where('status', '!=', '5')->get();
+$transfer_new = DB::table('server_transfers')->where('new_server_id', '=', $server->id)->where('status', '!=', '5')->get();
+
+if (count($transfer_old) > 0) {
+	$type = 'old';
+	$status = $transfer_old[0]->status;
+}
+if (count($transfer_new) > 0) {
+	$type = 'new';
+	$status = $transfer_new[0]->status;
+}
+
+$current_status = '';
+$progress_bar = '';
+
+if ($status > 0) {
+	switch ($status) {
+		case 1:
+			$current_status = 'Compress old server...';
+			$progress_bar = '<div class="progress-bar progress-bar-striped progress-bar-danger" role="progressbar" style="width: 20%" aria-valuenow="20" aria-valuemin="0" aria-valuemax="100"></div>';
+			break;
+		case 2:
+			$current_status = 'Creating new server...';
+			$progress_bar = '<div class="progress-bar progress-bar-striped progress-bar-warning" role="progressbar" style="width: 40%" aria-valuenow="40" aria-valuemin="0" aria-valuemax="100"></div>';
+			break;
+		case 3:
+			$current_status = 'Moving server files to new server...';
+			$progress_bar = '<div class="progress-bar progress-bar-striped progress-bar-primary" role="progressbar" style="width: 60%" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100"></div>';
+			break;
+		case 4:
+			$current_status = 'Decompress server files...';
+			$progress_bar = '<div class="progress-bar progress-bar-striped progress-bar-success" role="progressbar" style="width: 80%" aria-valuenow="80" aria-valuemin="0" aria-valuemax="100"></div>';
+			break;
+	}
+}
+
+$transfer = [
+	'type' => $type,
+	'status' => $current_status,
+	'progress_bar' => $progress_bar
+];
+
+return view('admin.servers.view.manage', ['server' => $server, 'nodes' => $nodes, 'allocations' => $allocations, 'status' => $status, 'transfer' => $transfer]);
+
+        return view('admin.servers.view.manage', ['server' => $server]);
+    }
+
+    /**
+     * Display the deletion page for a server.
+     *
+     * @param \Pterodactyl\Models\Server $server
+     * @return \Illuminate\View\View
+     */
+    public function viewDelete(Server $server)
+    {
+        return view('admin.servers.view.delete', ['server' => $server]);
     }
 
     /**
      * Update the details for a server.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param \Illuminate\Http\Request   $request
      * @param \Pterodactyl\Models\Server $server
      * @return \Illuminate\Http\RedirectResponse
      *
@@ -227,9 +517,24 @@ class ServersController extends Controller
     }
 
     /**
+     * Setup a server to have a container rebuild.
+     *
+     * @param \Pterodactyl\Models\Server $server
+     * @return \Illuminate\Http\RedirectResponse
+     * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
+     */
+    public function rebuildContainer(Server $server)
+    {
+        $this->containerRebuildService->handle($server);
+        $this->alert->success(trans('admin/server.alerts.rebuild_on_boot'))->flash();
+
+        return redirect()->route('admin.servers.view.manage', $server->id);
+    }
+
+    /**
      * Manage the suspension status for a server.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param \Illuminate\Http\Request   $request
      * @param \Pterodactyl\Models\Server $server
      * @return \Illuminate\Http\RedirectResponse
      *
@@ -250,7 +555,7 @@ class ServersController extends Controller
     /**
      * Update the build configuration for a server.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param \Illuminate\Http\Request   $request
      * @param \Pterodactyl\Models\Server $server
      * @return \Illuminate\Http\RedirectResponse
      *
@@ -273,12 +578,12 @@ class ServersController extends Controller
     /**
      * Start the server deletion process.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param \Illuminate\Http\Request   $request
      * @param \Pterodactyl\Models\Server $server
      * @return \Illuminate\Http\RedirectResponse
      *
      * @throws \Pterodactyl\Exceptions\DisplayException
-     * @throws \Throwable
+     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
      */
     public function delete(Request $request, Server $server)
     {
@@ -291,11 +596,12 @@ class ServersController extends Controller
     /**
      * Update the startup command as well as variables.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param \Illuminate\Http\Request   $request
      * @param \Pterodactyl\Models\Server $server
      * @return \Illuminate\Http\RedirectResponse
      *
      * @throws \Illuminate\Validation\ValidationException
+     * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException
      * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
      */
@@ -312,7 +618,7 @@ class ServersController extends Controller
      * Creates a new database assigned to a specific server.
      *
      * @param \Pterodactyl\Http\Requests\Admin\Servers\Databases\StoreServerDatabaseRequest $request
-     * @param int $server
+     * @param int                                                                           $server
      * @return \Illuminate\Http\RedirectResponse
      *
      * @throws \Exception
@@ -332,7 +638,7 @@ class ServersController extends Controller
      * Resets the database password for a specific database on this server.
      *
      * @param \Illuminate\Http\Request $request
-     * @param int $server
+     * @param int                      $server
      * @return \Illuminate\Http\RedirectResponse
      *
      * @throws \Throwable
@@ -370,4 +676,87 @@ class ServersController extends Controller
 
         return response('', 204);
     }
+    public function transferServer(Request $request, Server $server)
+{
+	$new_node = (int) $request->input('new_node');
+	$new_allocation = (int) $request->input('new_allocation');
+
+	$issetNode = DB::table('nodes')->where('id', '=', $new_node)->get();
+	if (count($issetNode) < 1) {
+		$this->alert->danger('The selected node not found.' . $new_node)->flash();
+	} else if ($server->node_id == $new_node) {
+		$this->alert->danger('This is the current node.')->flash();
+	} else {
+		$transfer = DB::table('server_transfers')->where('old_server_id', '=', $server->id)->get();
+		if (count($transfer) > 0) {
+			$this->alert->danger('The server transfer is in progress.')->flash();
+		} else {
+			$issetAllocation = DB::table('allocations')->where('node_id', '=', $new_node)->where('id', '=', $new_allocation)->whereNull('server_id')->get();
+			if (count($issetAllocation) < 1) {
+				$this->alert->danger('Allocation not found.')->flash();
+			} else {
+				$environments = [];
+				$env = DB::table('server_variables')->where('server_id', '=', $server->id)->get();
+				foreach ($env as $item) {
+					$var = DB::table('egg_variables')->where('id', '=', $item->variable_id)->get();
+
+					$environments[$var[0]->env_variable] = $item->variable_value;
+				}
+
+				$new_server = $this->service->handle([
+					'name' => $server->name,
+					'description' => $server->description,
+					'owner_id' => $server->owner_id,
+					'start_on_completion' => 0,
+					'memory' => $server->memory,
+					'swap' => $server->swap,
+					'cpu' => $server->cpu,
+					'disk' => $server->disk,
+					'io' => $server->io,
+					'nest_id' => (int) $server->nest_id,
+					'egg_id' => (int) $server->egg_id,
+					'pack_id' => (int) $server->pack_id,
+					'startup' => $server->startup,
+					'allocation_limit' => (int) $server->allocation_limit,
+					'database_limit' => (int) $server->database_limit,
+					'node_id' => (int) $new_node,
+					'allocation_id' => (int) $new_allocation,
+					'image' => $server->image,
+					'environment' => $environments
+				]);
+
+				$this->suspensionService->toggle($server, 'suspend');
+
+				$start = $this->serverTransferRepository->setServer($server)->start([
+					'id' => $server->id
+				]);
+
+				if ($start->getStatusCode() != 200) {
+					$this->suspensionService->toggle($server, 'unsuspend');
+					$this->alert->danger('Old server files could not be compressed.')->flash();
+				} else {
+					/*
+					 * Status:
+					 * 1 => Compressing
+					 * 2 => Creating new server
+					 * 3 => Moving to new node
+					 * 4 => Decompress files
+					 * 5 => Finish
+					 */
+					DB::table('server_transfers')->insert([
+						'old_server_id' => $server->id,
+						'new_node_id' => $new_node,
+						'new_server_id' => $new_server->id,
+						'new_allocation_id' => $new_allocation,
+						'status' => '1'
+					]);
+
+					$this->alert->success('Server transfer has started...')->flash();
+				}
+			}
+		}
+	}
+
+	return redirect()->route('admin.servers.view.manage', $server->id);
+}
 }

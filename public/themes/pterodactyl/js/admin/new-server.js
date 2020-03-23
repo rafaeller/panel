@@ -39,7 +39,7 @@ $(document).ready(function() {
 
     $('#pUserId').select2({
         ajax: {
-            url: '/admin/users/accounts.json',
+            url: Router.route('admin.users.json'),
             dataType: 'json',
             delay: 250,
             data: function (params) {

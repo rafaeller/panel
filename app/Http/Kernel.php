@@ -2,6 +2,7 @@
 
 namespace Pterodactyl\Http;
 
+use Pterodactyl\Http\Middleware\Server\IsMinecraftServer;
 use Pterodactyl\Models\ApiKey;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Auth\Middleware\Authenticate;
@@ -49,7 +50,6 @@ class Kernel extends HttpKernel
      */
     protected $middleware = [
         CheckForMaintenanceMode::class,
-        EncryptCookies::class,
         ValidatePostSize::class,
         TrimStrings::class,
         ConvertEmptyStringsToNull::class,
@@ -63,6 +63,7 @@ class Kernel extends HttpKernel
      */
     protected $middlewareGroups = [
         'web' => [
+            EncryptCookies::class,
             AddQueuedCookiesToResponse::class,
             StartSession::class,
             AuthenticateSession::class,
@@ -73,7 +74,7 @@ class Kernel extends HttpKernel
             RequireTwoFactorAuthentication::class,
         ],
         'api' => [
-            'throttle:240,1',
+            'throttle:120,1',
             ApiSubstituteBindings::class,
             SetSessionDriver::class,
             'api..key:' . ApiKey::TYPE_APPLICATION,
@@ -81,11 +82,9 @@ class Kernel extends HttpKernel
             AuthenticateIPAccess::class,
         ],
         'client-api' => [
-            'throttle:240,1',
-            StartSession::class,
-            SetSessionDriver::class,
-            AuthenticateSession::class,
+            'throttle:60,1',
             SubstituteClientApiBindings::class,
+            SetSessionDriver::class,
             'api..key:' . ApiKey::TYPE_ACCOUNT,
             AuthenticateIPAccess::class,
         ],
@@ -122,6 +121,7 @@ class Kernel extends HttpKernel
         'server..database' => DatabaseBelongsToServer::class,
         'server..subuser' => SubuserBelongsToServer::class,
         'server..schedule' => ScheduleBelongsToServer::class,
+        'server..isminecraftserver' => IsMinecraftServer::class,
 
         // API Specific Middleware
         'api..key' => AuthenticateKey::class,

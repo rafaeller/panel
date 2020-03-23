@@ -1,41 +1,48 @@
 <?php
+/**
+ * Pterodactyl - Panel
+ * Copyright (c) 2015 - 2017 Dane Everitt <dane@daneeveritt.com>.
+ *
+ * This software is licensed under the terms of the MIT license.
+ * https://opensource.org/licenses/MIT
+ */
 
 namespace Pterodactyl\Services\Servers;
 
 use Pterodactyl\Models\Server;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Database\ConnectionInterface;
-use Pterodactyl\Repositories\Wings\DaemonServerRepository;
 use Pterodactyl\Contracts\Repository\ServerRepositoryInterface;
 use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
+use Pterodactyl\Contracts\Repository\Daemon\ServerRepositoryInterface as DaemonServerRepositoryInterface;
 
 class ReinstallServerService
 {
     /**
-     * @var \Pterodactyl\Repositories\Wings\DaemonServerRepository
+     * @var \Pterodactyl\Contracts\Repository\Daemon\ServerRepositoryInterface
      */
-    private $daemonServerRepository;
+    protected $daemonServerRepository;
 
     /**
      * @var \Illuminate\Database\ConnectionInterface
      */
-    private $database;
+    protected $database;
 
     /**
      * @var \Pterodactyl\Contracts\Repository\ServerRepositoryInterface
      */
-    private $repository;
+    protected $repository;
 
     /**
      * ReinstallService constructor.
      *
-     * @param \Illuminate\Database\ConnectionInterface $database
-     * @param \Pterodactyl\Repositories\Wings\DaemonServerRepository $daemonServerRepository
-     * @param \Pterodactyl\Contracts\Repository\ServerRepositoryInterface $repository
+     * @param \Illuminate\Database\ConnectionInterface                           $database
+     * @param \Pterodactyl\Contracts\Repository\Daemon\ServerRepositoryInterface $daemonServerRepository
+     * @param \Pterodactyl\Contracts\Repository\ServerRepositoryInterface        $repository
      */
     public function __construct(
         ConnectionInterface $database,
-        DaemonServerRepository $daemonServerRepository,
+        DaemonServerRepositoryInterface $daemonServerRepository,
         ServerRepositoryInterface $repository
     ) {
         $this->daemonServerRepository = $daemonServerRepository;

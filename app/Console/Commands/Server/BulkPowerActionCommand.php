@@ -5,9 +5,9 @@ namespace Pterodactyl\Console\Commands\Server;
 use Illuminate\Console\Command;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Validation\ValidationException;
-use Pterodactyl\Repositories\Daemon\PowerRepository;
 use Illuminate\Validation\Factory as ValidatorFactory;
 use Pterodactyl\Contracts\Repository\ServerRepositoryInterface;
+use Pterodactyl\Contracts\Repository\Daemon\PowerRepositoryInterface;
 
 class BulkPowerActionCommand extends Command
 {
@@ -42,12 +42,12 @@ class BulkPowerActionCommand extends Command
     /**
      * BulkPowerActionCommand constructor.
      *
-     * @param \Pterodactyl\Repositories\Daemon\PowerRepository $powerRepository
-     * @param \Pterodactyl\Contracts\Repository\ServerRepositoryInterface $repository
-     * @param \Illuminate\Validation\Factory $validator
+     * @param \Pterodactyl\Contracts\Repository\Daemon\PowerRepositoryInterface $powerRepository
+     * @param \Pterodactyl\Contracts\Repository\ServerRepositoryInterface       $repository
+     * @param \Illuminate\Validation\Factory                                    $validator
      */
     public function __construct(
-        PowerRepository $powerRepository,
+        PowerRepositoryInterface $powerRepository,
         ServerRepositoryInterface $repository,
         ValidatorFactory $validator
     ) {
@@ -91,14 +91,14 @@ class BulkPowerActionCommand extends Command
         }
 
         $count = $this->repository->getServersForPowerActionCount($servers, $nodes);
-        if (! $this->confirm(trans('command/messages.server.power.confirm', ['action' => $action, 'count' => $count])) && $this->input->isInteractive()) {
+        if (! $this->confirm(trans('command/messages.server.power.confirm', ['action' => $action, 'count' => $count]))) {
             return;
         }
 
         $bar = $this->output->createProgressBar($count);
         $servers = $this->repository->getServersForPowerAction($servers, $nodes);
 
-        $servers->each(function ($server) use ($action, &$bar) {
+        foreach ($servers as $server) {
             $bar->clear();
 
             try {
@@ -117,7 +117,7 @@ class BulkPowerActionCommand extends Command
 
             $bar->advance();
             $bar->display();
-        });
+        }
 
         $this->line('');
     }

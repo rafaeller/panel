@@ -3,8 +3,6 @@
 namespace Tests\Unit\Http\Controllers\Base;
 
 use Mockery as m;
-use Illuminate\Http\Response;
-use Illuminate\Support\Collection;
 use Prologue\Alerts\AlertsMessageBag;
 use Illuminate\Contracts\Config\Repository;
 use Tests\Unit\Http\Controllers\ControllerTestCase;
@@ -56,86 +54,124 @@ class SecurityControllerTest extends ControllerTestCase
     }
 
     /**
-     * Test TOTP generation controller.
+     * Test the index controller when using a database driver.
      */
-    public function testIndexWithout2FactorEnabled()
+    public function testIndexControllerWithDatabaseDriver()
     {
-        $model = $this->generateRequestUserModel(['use_totp' => 0]);
+        $model = $this->generateRequestUserModel();
 
-        $this->twoFactorSetupService->shouldReceive('handle')->with($model)->once()->andReturn(new Collection([
-            'image' => 'test-image',
-            'secret' => 'secret-code',
-        ]));
+        $this->config->shouldReceive('get')->with('session.driver')->once()->andReturn('database');
+        $this->repository->shouldReceive('getUserSessions')->with($model->id)->once()->andReturn(collect(['sessions']));
 
         $response = $this->getController()->index($this->request);
+        $this->assertIsViewResponse($response);
+        $this->assertViewNameEquals('base.security', $response);
+        $this->assertViewHasKey('sessions', $response);
+        $this->assertViewKeyEquals('sessions', collect(['sessions']), $response);
+    }
+
+    /**
+     * Test the index controller when not using the database driver.
+     */
+    public function testIndexControllerWithoutDatabaseDriver()
+    {
+        $this->config->shouldReceive('get')->with('session.driver')->once()->andReturn('redis');
+
+        $response = $this->getController()->index($this->request);
+        $this->assertIsViewResponse($response);
+        $this->assertViewNameEquals('base.security', $response);
+        $this->assertViewHasKey('sessions', $response);
+        $this->assertViewKeyEquals('sessions', null, $response);
+    }
+
+    /**
+     * Test TOTP generation controller.
+     */
+    public function testGenerateTotpController()
+    {
+        $model = $this->generateRequestUserModel();
+
+        $this->twoFactorSetupService->shouldReceive('handle')->with($model)->once()->andReturn('qrCodeImage');
+
+        $response = $this->getController()->generateTotp($this->request);
         $this->assertIsJsonResponse($response);
-        $this->assertResponseCodeEquals(Response::HTTP_OK, $response);
-        $this->assertResponseJsonEquals(['enabled' => false, 'qr_image' => 'test-image', 'secret' => 'secret-code'], $response);
         $this->assertResponseJsonEquals(['qrImage' => 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=qrCodeImage'], $response);
     }
 
     /**
      * Test TOTP setting controller when no exception is thrown by the service.
      */
-    public function testIndexWith2FactorEnabled()
-    {
-        $this->generateRequestUserModel(['use_totp' => 1]);
-
-        $response = $this->getController()->index($this->request);
-        $this->assertIsJsonResponse($response);
-        $this->assertResponseCodeEquals(Response::HTTP_OK, $response);
-        $this->assertResponseJsonEquals(['enabled' => true], $response);
-    }
-
-    /**
-     * Test that a 2FA token can be stored or deleted.
-     *
-     * @param string $func
-     * @dataProvider functionCallDataProvider
-     */
-    public function testStore(string $func)
+    public function testSetTotpControllerSuccess()
     {
         $model = $this->generateRequestUserModel();
 
-        $this->mockRequestInput('token', 'some-token');
+        $this->request->shouldReceive('input')->with('token')->once()->andReturn('testToken');
+        $this->toggleTwoFactorService->shouldReceive('handle')->with($model, 'testToken')->once();
 
-        if ($func === 'delete') {
-            $this->toggleTwoFactorService->shouldReceive('handle')->with($model, 'some-token', false);
-        } else {
-            $this->toggleTwoFactorService->shouldReceive('handle')->with($model, 'some-token');
-        }
-
-        $response = $this->getController()->{$func}($this->request);
-        $this->assertIsJsonResponse($response);
-        $this->assertResponseCodeEquals(Response::HTTP_OK, $response);
-        $this->assertResponseJsonEquals(['success' => true], $response);
+        $response = $this->getController()->setTotp($this->request);
+        $this->assertIsResponse($response);
+        $this->assertSame('true', $response->getContent());
     }
 
     /**
-     * Test an invalid token exception is handled.
-     *
-     * @param string $func
-     * @dataProvider functionCallDataProvider
+     * Test TOTP setting controller when an exception is thrown by the service.
      */
-    public function testStoreWithInvalidTokenException(string $func)
+    public function testSetTotpControllerWhenExceptionIsThrown()
     {
-        $this->generateRequestUserModel();
+        $model = $this->generateRequestUserModel();
 
-        $this->mockRequestInput('token');
-        $this->toggleTwoFactorService->shouldReceive('handle')->andThrow(new TwoFactorAuthenticationTokenInvalid);
+        $this->request->shouldReceive('input')->with('token')->once()->andReturn('testToken');
+        $this->toggleTwoFactorService->shouldReceive('handle')->with($model, 'testToken')->once()->andThrow(new TwoFactorAuthenticationTokenInvalid());
 
-        $response = $this->getController()->{$func}($this->request);
-        $this->assertIsJsonResponse($response);
-        $this->assertResponseCodeEquals(Response::HTTP_OK, $response);
-        $this->assertResponseJsonEquals(['success' => false], $response);
+        $response = $this->getController()->setTotp($this->request);
+        $this->assertIsResponse($response);
+        $this->assertSame('false', $response->getContent());
     }
 
     /**
-     * @return array
+     * Test the disable totp controller when no exception is thrown by the service.
      */
-    public function functionCallDataProvider()
+    public function testDisableTotpControllerSuccess()
     {
-        return [['store'], ['delete']];
+        $model = $this->generateRequestUserModel();
+
+        $this->request->shouldReceive('input')->with('token')->once()->andReturn('testToken');
+        $this->toggleTwoFactorService->shouldReceive('handle')->with($model, 'testToken', false)->once()->andReturn(true);
+
+        $response = $this->getController()->disableTotp($this->request);
+        $this->assertIsRedirectResponse($response);
+        $this->assertRedirectRouteEquals('account.security', $response);
+    }
+
+    /**
+     * Test the disable totp controller when an exception is thrown by the service.
+     */
+    public function testDisableTotpControllerWhenExceptionIsThrown()
+    {
+        $model = $this->generateRequestUserModel();
+
+        $this->request->shouldReceive('input')->with('token')->once()->andReturn('testToken');
+        $this->toggleTwoFactorService->shouldReceive('handle')->with($model, 'testToken', false)->once()->andThrow(new TwoFactorAuthenticationTokenInvalid);
+        $this->alert->shouldReceive('danger')->with(trans('base.security.2fa_disable_error'))->once()->andReturnSelf();
+        $this->alert->shouldReceive('flash')->withNoArgs()->once()->andReturnNull();
+
+        $response = $this->getController()->disableTotp($this->request);
+        $this->assertIsRedirectResponse($response);
+        $this->assertRedirectRouteEquals('account.security', $response);
+    }
+
+    /**
+     * Test the revoke controller.
+     */
+    public function testRevokeController()
+    {
+        $model = $this->generateRequestUserModel();
+
+        $this->repository->shouldReceive('deleteUserSession')->with($model->id, 123)->once()->andReturnNull();
+
+        $response = $this->getController()->revoke($this->request, 123);
+        $this->assertIsRedirectResponse($response);
+        $this->assertRedirectRouteEquals('account.security', $response);
     }
 
     /**

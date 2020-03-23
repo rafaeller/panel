@@ -3,25 +3,23 @@
 namespace Pterodactyl\Http\Controllers\Api\Client;
 
 use Pterodactyl\Models\User;
-use Illuminate\Support\Collection;
-use Pterodactyl\Models\Permission;
-use Pterodactyl\Repositories\Eloquent\ServerRepository;
 use Pterodactyl\Transformers\Api\Client\ServerTransformer;
 use Pterodactyl\Http\Requests\Api\Client\GetServersRequest;
+use Pterodactyl\Contracts\Repository\ServerRepositoryInterface;
 
 class ClientController extends ClientApiController
 {
     /**
-     * @var \Pterodactyl\Repositories\Eloquent\ServerRepository
+     * @var \Pterodactyl\Contracts\Repository\ServerRepositoryInterface
      */
     private $repository;
 
     /**
      * ClientController constructor.
      *
-     * @param \Pterodactyl\Repositories\Eloquent\ServerRepository $repository
+     * @param \Pterodactyl\Contracts\Repository\ServerRepositoryInterface $repository
      */
-    public function __construct(ServerRepository $repository)
+    public function __construct(ServerRepositoryInterface $repository)
     {
         parent::__construct();
 
@@ -54,35 +52,12 @@ class ClientController extends ClientApiController
                 break;
         }
 
-        $servers = $this->repository
-            ->setSearchTerm($request->input('query'))
-            ->filterUserAccessServers(
-                $request->user(), $filter, config('pterodactyl.paginate.frontend.servers')
-            );
+        $servers = $this->repository->filterUserAccessServers(
+            $request->user(), $filter, config('pterodactyl.paginate.frontend.servers')
+        );
 
         return $this->fractal->collection($servers)
             ->transformWith($this->getTransformer(ServerTransformer::class))
             ->toArray();
-    }
-
-    /**
-     * Returns all of the subuser permissions available on the system.
-     *
-     * @return array
-     */
-    public function permissions()
-    {
-        $permissions = Permission::permissions()->map(function ($values, $key) {
-            return Collection::make($values)->map(function ($permission) use ($key) {
-                return $key . '.' . $permission;
-            })->values()->toArray();
-        })->flatten();
-
-        return [
-            'object' => 'system_permissions',
-            'attributes' => [
-                'permissions' => $permissions,
-            ],
-        ];
     }
 }

@@ -2,8 +2,16 @@
 
 namespace Pterodactyl\Models;
 
-class Database extends Validable
+use Sofa\Eloquence\Eloquence;
+use Sofa\Eloquence\Validable;
+use Illuminate\Database\Eloquent\Model;
+use Sofa\Eloquence\Contracts\CleansAttributes;
+use Sofa\Eloquence\Contracts\Validable as ValidableContract;
+
+class Database extends Model implements CleansAttributes, ValidableContract
 {
+    use Eloquence, Validable;
+
     /**
      * The resource name for this model when it is transformed into an
      * API representation using fractal.
@@ -43,15 +51,19 @@ class Database extends Validable
         'database_host_id' => 'integer',
     ];
 
-    /**
-     * @var array
-     */
-    public static $validationRules = [
-        'server_id' => 'required|numeric|exists:servers,id',
-        'database_host_id' => 'required|exists:database_hosts,id',
-        'database' => 'required|string|alpha_dash|between:3,100',
+    protected static $applicationRules = [
+        'server_id' => 'required',
+        'database_host_id' => 'required',
+        'database' => 'required',
+        'remote' => 'required',
+    ];
+
+    protected static $dataIntegrityRules = [
+        'server_id' => 'numeric|exists:servers,id',
+        'database_host_id' => 'exists:database_hosts,id',
+        'database' => 'string|alpha_dash|between:3,100',
         'username' => 'string|alpha_dash|between:3,100',
-        'remote' => 'required|string|regex:/^[0-9%.]{1,15}$/',
+        'remote' => 'string|regex:/^[0-9%.]{1,15}$/',
         'password' => 'string',
     ];
 

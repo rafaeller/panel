@@ -2,27 +2,15 @@
 
 namespace Pterodactyl\Models;
 
-use Pterodactyl\Models\Traits\Searchable;
+use Sofa\Eloquence\Eloquence;
+use Sofa\Eloquence\Validable;
+use Illuminate\Database\Eloquent\Model;
+use Sofa\Eloquence\Contracts\CleansAttributes;
+use Sofa\Eloquence\Contracts\Validable as ValidableContract;
 
-/**
- * @property int $id
- * @property int $egg_id
- * @property string $uuid
- * @property string $name
- * @property string $version
- * @property string $description
- * @property bool $selectable
- * @property bool $visible
- * @property bool $locked
- * @property \Carbon\Carbon $created_at
- * @property \Carbon\Carbon $updated_at
- *
- * @property \Pterodactyl\Models\Egg|null $egg
- * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Server[] $servers
- */
-class Pack extends Validable
+class Pack extends Model implements CleansAttributes, ValidableContract
 {
-    use Searchable;
+    use Eloquence, Validable;
 
     /**
      * The resource name for this model when it is transformed into an
@@ -49,14 +37,27 @@ class Pack extends Validable
     /**
      * @var array
      */
-    public static $validationRules = [
-        'name' => 'required|string',
-        'version' => 'required|string',
-        'description' => 'sometimes|nullable|string',
-        'selectable' => 'sometimes|required|boolean',
-        'visible' => 'sometimes|required|boolean',
-        'locked' => 'sometimes|required|boolean',
-        'egg_id' => 'required|exists:eggs,id',
+    protected static $applicationRules = [
+        'name' => 'required',
+        'version' => 'required',
+        'description' => 'sometimes',
+        'selectable' => 'sometimes|required',
+        'visible' => 'sometimes|required',
+        'locked' => 'sometimes|required',
+        'egg_id' => 'required',
+    ];
+
+    /**
+     * @var array
+     */
+    protected static $dataIntegrityRules = [
+        'name' => 'string',
+        'version' => 'string',
+        'description' => 'nullable|string',
+        'selectable' => 'boolean',
+        'visible' => 'boolean',
+        'locked' => 'boolean',
+        'egg_id' => 'exists:eggs,id',
     ];
 
     /**

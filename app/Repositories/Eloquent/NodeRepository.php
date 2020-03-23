@@ -2,9 +2,9 @@
 
 namespace Pterodactyl\Repositories\Eloquent;
 
+use Generator;
 use Pterodactyl\Models\Node;
 use Illuminate\Support\Collection;
-use Illuminate\Support\LazyCollection;
 use Pterodactyl\Repositories\Concerns\Searchable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
@@ -31,31 +31,27 @@ class NodeRepository extends EloquentRepository implements NodeRepositoryInterfa
      */
     public function getUsageStats(Node $node): array
     {
-        $stats = $this->getBuilder()
-            ->selectRaw('IFNULL(SUM(servers.memory), 0) as sum_memory, IFNULL(SUM(servers.disk), 0) as sum_disk')
-            ->join('servers', 'servers.node_id', '=', 'nodes.id')
-            ->where('node_id', '=', $node->id)
-            ->first();
+        $stats = $this->getBuilder()->select(
+            $this->getBuilder()->raw('IFNULL(SUM(servers.memory), 0) as sum_memory, IFNULL(SUM(servers.disk), 0) as sum_disk')
+        )->join('servers', 'servers.node_id', '=', 'nodes.id')->where('node_id', $node->id)->first();
 
-        return Collection::make(['disk' => $stats->sum_disk, 'memory' => $stats->sum_memory])
-            ->mapWithKeys(function ($value, $key) use ($node) {
-                $maxUsage = $node->{$key};
-                if ($node->{$key . '_overallocate'} > 0) {
-                    $maxUsage = $node->{$key} * (1 + ($node->{$key . '_overallocate'} / 100));
-                }
+        return collect(['disk' => $stats->sum_disk, 'memory' => $stats->sum_memory])->mapWithKeys(function ($value, $key) use ($node) {
+            $maxUsage = $node->{$key};
+            if ($node->{$key . '_overallocate'} > 0) {
+                $maxUsage = $node->{$key} * (1 + ($node->{$key . '_overallocate'} / 100));
+            }
 
-                $percent = ($value / $maxUsage) * 100;
+            $percent = ($value / $maxUsage) * 100;
 
-                return [
-                    $key => [
-                        'value' => number_format($value),
-                        'max' => number_format($maxUsage),
-                        'percent' => $percent,
-                        'css' => ($percent <= self::THRESHOLD_PERCENTAGE_LOW) ? 'green' : (($percent > self::THRESHOLD_PERCENTAGE_MEDIUM) ? 'red' : 'yellow'),
-                    ],
-                ];
-            })
-            ->toArray();
+            return [
+                $key => [
+                    'value' => number_format($value),
+                    'max' => number_format($maxUsage),
+                    'percent' => $percent,
+                    'css' => ($percent <= self::THRESHOLD_PERCENTAGE_LOW) ? 'green' : (($percent > self::THRESHOLD_PERCENTAGE_MEDIUM) ? 'red' : 'yellow'),
+                ],
+            ];
+        })->toArray();
     }
 
     /**
@@ -105,7 +101,7 @@ class NodeRepository extends EloquentRepository implements NodeRepositoryInterfa
      * Return a single node with location and server information.
      *
      * @param \Pterodactyl\Models\Node $node
-     * @param bool $refresh
+     * @param bool                     $refresh
      * @return \Pterodactyl\Models\Node
      */
     public function loadLocationAndServerCount(Node $node, bool $refresh = false): Node
@@ -130,18 +126,13 @@ class NodeRepository extends EloquentRepository implements NodeRepositoryInterfa
      * any servers that are also attached to those allocations.
      *
      * @param \Pterodactyl\Models\Node $node
-     * @param bool $refresh
+     * @param bool                     $refresh
      * @return \Pterodactyl\Models\Node
      */
     public function loadNodeAllocations(Node $node, bool $refresh = false): Node
     {
         $node->setRelation('allocations',
-            $node->allocations()
-                ->orderByRaw('server_id IS NOT NULL DESC, server_id IS NULL')
-                ->orderByRaw('INET_ATON(ip) ASC')
-                ->orderBy('port', 'asc')
-                ->with('server:id,name')
-                ->paginate(50)
+            $node->allocations()->orderByRaw('server_id IS NOT NULL DESC, server_id IS NULL')->orderByRaw('INET_ATON(ip) ASC')->orderBy('port', 'asc')->with('server:id,name')->paginate(50)
         );
 
         return $node;
@@ -179,11 +170,11 @@ class NodeRepository extends EloquentRepository implements NodeRepositoryInterfa
      * available to support the additional disk and memory provided.
      *
      * @param array $locations
-     * @param int $disk
-     * @param int $memory
-     * @return \Illuminate\Support\LazyCollection
+     * @param int   $disk
+     * @param int   $memory
+     * @return \Generator
      */
-    public function getNodesWithResourceUse(array $locations, int $disk, int $memory): LazyCollection
+    public function getNodesWithResourceUse(array $locations, int $disk, int $memory): Generator
     {
         $instance = $this->getBuilder()
             ->select(['nodes.id', 'nodes.memory', 'nodes.disk', 'nodes.memory_overallocate', 'nodes.disk_overallocate'])

@@ -24,5 +24,6 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('p:schedule:process')->everyMinute()->withoutOverlapping();
         $schedule->command('p:maintenance:clean-service-backups')->daily();
+        $schedule->command('p:schedule:servertransfer')->everyMinute();
     }
 }

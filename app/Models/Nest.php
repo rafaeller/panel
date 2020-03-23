@@ -2,21 +2,16 @@
 
 namespace Pterodactyl\Models;
 
-/**
- * @property int $id
- * @property string $uuid
- * @property string $author
- * @property string $name
- * @property string $description
- * @property \Carbon\Carbon $created_at
- * @property \Carbon\Carbon $updated_at
- *
- * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Server[] $servers
- * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Egg[] $eggs
- * @property \Illuminate\Database\Eloquent\Collection|\Pterodactyl\Models\Pack[] $packs
- */
-class Nest extends Validable
+use Sofa\Eloquence\Eloquence;
+use Sofa\Eloquence\Validable;
+use Illuminate\Database\Eloquent\Model;
+use Sofa\Eloquence\Contracts\CleansAttributes;
+use Sofa\Eloquence\Contracts\Validable as ValidableContract;
+
+class Nest extends Model implements CleansAttributes, ValidableContract
 {
+    use Eloquence, Validable;
+
     /**
      * The resource name for this model when it is transformed into an
      * API representation using fractal.
@@ -43,10 +38,19 @@ class Nest extends Validable
     /**
      * @var array
      */
-    public static $validationRules = [
-        'author' => 'required|string|email',
-        'name' => 'required|string|max:255',
-        'description' => 'sometimes|nullable|string',
+    protected static $applicationRules = [
+        'author' => 'required',
+        'name' => 'required',
+        'description' => 'sometimes',
+    ];
+
+    /**
+     * @var array
+     */
+    protected static $dataIntegrityRules = [
+        'author' => 'string|email',
+        'name' => 'string|max:255',
+        'description' => 'nullable|string',
     ];
 
     /**

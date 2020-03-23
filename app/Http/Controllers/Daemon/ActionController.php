@@ -6,6 +6,7 @@ use Cache;
 use Illuminate\Http\Request;
 use Pterodactyl\Models\Node;
 use Illuminate\Http\Response;
+use Pterodactyl\Models\Server;
 use Illuminate\Http\JsonResponse;
 use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Repositories\Eloquent\ServerRepository;
@@ -19,7 +20,6 @@ class ActionController extends Controller
      * @var \Illuminate\Contracts\Events\Dispatcher
      */
     private $eventDispatcher;
-
     /**
      * @var \Pterodactyl\Repositories\Eloquent\ServerRepository
      */
@@ -29,7 +29,7 @@ class ActionController extends Controller
      * ActionController constructor.
      *
      * @param \Pterodactyl\Repositories\Eloquent\ServerRepository $repository
-     * @param \Illuminate\Contracts\Events\Dispatcher $eventDispatcher
+     * @param \Illuminate\Contracts\Events\Dispatcher             $eventDispatcher
      */
     public function __construct(ServerRepository $repository, EventDispatcher $eventDispatcher)
     {
@@ -89,7 +89,7 @@ class ActionController extends Controller
      * Handles configuration data request from daemon.
      *
      * @param \Illuminate\Http\Request $request
-     * @param string $token
+     * @param string                   $token
      * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function configuration(Request $request, $token)
@@ -102,6 +102,6 @@ class ActionController extends Controller
         $node = Node::findOrFail($nodeId);
 
         // Manually as getConfigurationAsJson() returns it in correct format already
-        return [];
+        return response($node->getConfigurationAsJson())->header('Content-Type', 'text/json');
     }
 }

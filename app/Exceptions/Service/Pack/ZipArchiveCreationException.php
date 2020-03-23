@@ -9,8 +9,6 @@
 
 namespace Pterodactyl\Exceptions\Service\Pack;
 
-use Exception;
-
-class ZipArchiveCreationException extends Exception
+class ZipArchiveCreationException extends \Exception
 {
 }
